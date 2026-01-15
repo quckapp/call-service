@@ -8,7 +8,7 @@ config :call_service, CallService.Endpoint,
   pubsub_server: CallService.PubSub
 
 config :call_service, :mongodb,
-  url: System.get_env("MONGODB_URI") || "mongodb://localhost:27017/quckchat_calls",
+  url: System.get_env("MONGODB_URI") || "mongodb://localhost:27017/quckapp_calls",
   pool_size: 10
 
 config :call_service, :redis,
@@ -21,7 +21,7 @@ config :call_service, :kafka,
   consumer_group: "call-service-group"
 
 config :call_service, CallService.Guardian,
-  issuer: "quckchat",
+  issuer: "quckapp",
   secret_key: System.get_env("JWT_SECRET") || "your-secret-key"
 
 config :call_service, :ice_servers, [
