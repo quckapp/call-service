@@ -1,6 +1,8 @@
 defmodule CallService.RedisClient do
   use GenServer
 
+  alias CallService.{CircuitBreaker, Distribution}
+
   @pool_size 5
   @prefix "call:"
 
@@ -10,12 +12,27 @@ defmodule CallService.RedisClient do
 
   @impl true
   def init(_) do
-    redis_url = Application.get_env(:call_service, :redis)[:url]
+    redis_config = Application.get_env(:call_service, :redis, [])
+
+    # Build Redix options from config
+    redix_opts = [
+      host: redis_config[:host] || "localhost",
+      port: redis_config[:port] || 6379,
+      database: redis_config[:database] || 4
+    ]
+
+    # Add password if configured
+    redix_opts = if redis_config[:password] do
+      Keyword.put(redix_opts, :password, redis_config[:password])
+    else
+      redix_opts
+    end
 
     children =
       for i <- 0..(@pool_size - 1) do
+        opts = Keyword.put(redix_opts, :name, :"redix_#{i}")
         Supervisor.child_spec(
-          {Redix, {redis_url, [name: :"redix_#{i}"]}},
+          {Redix, opts},
           id: {Redix, i}
         )
       end
@@ -25,8 +42,27 @@ defmodule CallService.RedisClient do
   end
 
   defp command(args) do
-    Redix.command(:"redix_#{:rand.uniform(@pool_size) - 1}", args)
+    CircuitBreaker.call(:redis, fn ->
+      pool_idx = get_pool_index(args)
+      Redix.command(:"redix_#{pool_idx}", args)
+    end, default: {:error, :redis_unavailable})
   end
+
+  # Use consistent hashing for pool selection based on the key
+  defp get_pool_index(args) do
+    key = extract_key(args)
+    if key do
+      Distribution.get_redis_pool(key)
+    else
+      :rand.uniform(@pool_size) - 1
+    end
+  rescue
+    _ -> :rand.uniform(@pool_size) - 1
+  end
+
+  # Extract the key from Redis command args for consistent hashing
+  defp extract_key([_cmd, key | _rest]) when is_binary(key), do: key
+  defp extract_key(_), do: nil
 
   # Active calls cache
   def set_active_call(call_id, call_data, ttl \\ 3600) do

@@ -21,6 +21,18 @@ defmodule CallService.HuddleManager do
     GenServer.call(__MODULE__, {:create_huddle, params})
   end
 
+  @doc "Create huddle with explicit parameters"
+  def create_huddle(channel_id, user_id, workspace_id, opts \\ []) do
+    params = %{
+      "channel_id" => channel_id,
+      "workspace_id" => workspace_id,
+      "initiator_id" => user_id
+    }
+    |> Map.merge(Enum.into(opts, %{}))
+
+    create_huddle(params)
+  end
+
   def get_huddle(huddle_id) do
     Repo.get_huddle(huddle_id)
   end
@@ -34,6 +46,11 @@ defmodule CallService.HuddleManager do
 
   def join_huddle(huddle_id, user_id) do
     GenServer.call(__MODULE__, {:join_huddle, huddle_id, user_id})
+  end
+
+  @doc "Join huddle with metadata"
+  def join_huddle(huddle_id, user_id, metadata) do
+    GenServer.call(__MODULE__, {:join_huddle, huddle_id, user_id, metadata})
   end
 
   def leave_huddle(huddle_id, user_id) do
@@ -55,6 +72,24 @@ defmodule CallService.HuddleManager do
         })
       huddle ->
         {:ok, huddle}
+    end
+  end
+
+  @doc "Toggle mute status for a participant in a huddle"
+  def toggle_mute(huddle_id, user_id, muted) do
+    GenServer.call(__MODULE__, {:toggle_mute, huddle_id, user_id, muted})
+  end
+
+  @doc "Toggle video status for a participant in a huddle"
+  def toggle_video(huddle_id, user_id, enabled) do
+    GenServer.call(__MODULE__, {:toggle_video, huddle_id, user_id, enabled})
+  end
+
+  @doc "Get all huddles for a channel (alias for get_channel_huddle returning as list)"
+  def get_channel_huddles(channel_id) do
+    case get_channel_huddle(channel_id) do
+      nil -> []
+      huddle -> [huddle]
     end
   end
 
@@ -86,6 +121,15 @@ defmodule CallService.HuddleManager do
 
   @impl true
   def handle_call({:join_huddle, huddle_id, user_id}, _from, state) do
+    handle_join_huddle(huddle_id, user_id, %{}, state)
+  end
+
+  @impl true
+  def handle_call({:join_huddle, huddle_id, user_id, metadata}, _from, state) do
+    handle_join_huddle(huddle_id, user_id, metadata, state)
+  end
+
+  defp handle_join_huddle(huddle_id, user_id, metadata, state) do
     case get_huddle(huddle_id) do
       nil ->
         {:reply, {:error, "Huddle not found"}, state}
@@ -96,8 +140,8 @@ defmodule CallService.HuddleManager do
           participant = %{
             "user_id" => user_id,
             "joined_at" => DateTime.utc_now(),
-            "audio_enabled" => true,
-            "video_enabled" => false
+            "audio_enabled" => Map.get(metadata, :audio_enabled, true),
+            "video_enabled" => Map.get(metadata, :video_enabled, false)
           }
 
           Repo.add_huddle_participant(huddle_id, participant)
@@ -147,6 +191,42 @@ defmodule CallService.HuddleManager do
         else
           {:reply, {:error, "Only initiator can end the huddle"}, state}
         end
+    end
+  end
+
+  @impl true
+  def handle_call({:toggle_mute, huddle_id, user_id, muted}, _from, state) do
+    case get_huddle(huddle_id) do
+      nil ->
+        {:reply, {:error, "Huddle not found"}, state}
+      huddle ->
+        Repo.update_huddle_participant(huddle_id, user_id, %{"audio_enabled" => !muted})
+
+        broadcast_huddle_event(huddle["channel_id"], :participant_mute_toggled, %{
+          huddle_id: huddle_id,
+          user_id: user_id,
+          muted: muted
+        })
+
+        {:reply, {:ok, %{user_id: user_id, muted: muted}}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:toggle_video, huddle_id, user_id, enabled}, _from, state) do
+    case get_huddle(huddle_id) do
+      nil ->
+        {:reply, {:error, "Huddle not found"}, state}
+      huddle ->
+        Repo.update_huddle_participant(huddle_id, user_id, %{"video_enabled" => enabled})
+
+        broadcast_huddle_event(huddle["channel_id"], :participant_video_toggled, %{
+          huddle_id: huddle_id,
+          user_id: user_id,
+          video_enabled: enabled
+        })
+
+        {:reply, {:ok, %{user_id: user_id, video_enabled: enabled}}, state}
     end
   end
 

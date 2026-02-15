@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  call-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: quckapp-call-service
+    restart: unless-stopped
+    ports:
+      - "4002:4002"
+      - "4369:4369"
+    environment:
+      MIX_ENV: dev
+      PORT: 4002
+      DATABASE_URL: postgresql://quckapp:quckapp_secret@postgres:5432/quckapp_calls
+      MONGODB_URL: mongodb://admin:admin_secret@mongodb:27017/quckapp_calls
+      REDIS_URL: redis://:redis_secret@redis:6379
+      KAFKA_BROKERS: kafka:9092
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:-dev_secret_key_base_min_64_chars}
+      RELEASE_COOKIE: ${ERLANG_COOKIE:-quckapp_dev_cookie}
+      AUTH_SERVICE_URL: http://auth-service:8081
+      JAEGER_ENDPOINT: http://jaeger:14268/api/traces
+    depends_on:
+      - mongodb
+      - redis
+      - kafka
+    networks:
+      - quckapp-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  mongodb:
+    image: mongo:7.0
+    container_name: quckapp-call-mongodb
+    restart: unless-stopped
+    ports:
+      - "27020:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin_secret
+      MONGO_INITDB_DATABASE: quckapp_calls
+    volumes:
+      - call_mongo_data:/data/db
+    networks:
+      - quckapp-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: quckapp-call-redis
+    restart: unless-stopped
+    ports:
+      - "6382:6379"
+    command: redis-server --requirepass redis_secret
+    volumes:
+      - call_redis_data:/data
+    networks:
+      - quckapp-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_secret", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: quckapp-call-kafka
+    restart: unless-stopped
+    ports:
+      - "9096:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      CLUSTER_ID: call-service-kafka-cluster
+    volumes:
+      - call_kafka_data:/var/lib/kafka/data
+    networks:
+      - quckapp-network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  quckapp-network:
+    driver: bridge
+
+volumes:
+  call_mongo_data:
+  call_redis_data:
+  call_kafka_data:
