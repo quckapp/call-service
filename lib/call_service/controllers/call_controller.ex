@@ -54,8 +54,12 @@ defmodule CallService.CallController do
 
   def history(conn, params) do
     user_id = conn.assigns[:current_user_id]
-    limit = String.to_integer(Map.get(params, "limit", "50"))
-    {:ok, calls} = CallService.CallManager.get_call_history(user_id, limit: limit)
-    json(conn, %{success: true, data: calls})
+    page = String.to_integer(Map.get(params, "page", "1"))
+    per_page = String.to_integer(Map.get(params, "per_page", "20"))
+    limit = String.to_integer(Map.get(params, "limit", "#{per_page}"))
+    offset = (page - 1) * per_page
+    {:ok, calls} = CallService.CallManager.get_call_history(user_id, limit: limit + offset)
+    paged_calls = calls |> Enum.drop(offset) |> Enum.take(per_page)
+    json(conn, %{success: true, data: paged_calls, calls: paged_calls, page: page, per_page: per_page, total: length(calls)})
   end
 end

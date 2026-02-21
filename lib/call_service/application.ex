@@ -15,12 +15,16 @@ defmodule CallService.Application do
         url: Application.get_env(:call_service, :mongodb)[:url],
         pool_size: Application.get_env(:call_service, :mongodb)[:pool_size] || 10
       ]},
-      {Redix, [
-        host: Application.get_env(:call_service, :redis)[:host],
-        port: Application.get_env(:call_service, :redis)[:port],
-        database: Application.get_env(:call_service, :redis)[:database] || 4,
-        name: :call_redis
-      ]},
+      {Redix,
+        [
+          host: Application.get_env(:call_service, :redis)[:host],
+          port: Application.get_env(:call_service, :redis)[:port],
+          database: Application.get_env(:call_service, :redis)[:database] || 4,
+          name: :call_redis
+        ] ++ if(Application.get_env(:call_service, :redis)[:password],
+          do: [password: Application.get_env(:call_service, :redis)[:password]],
+          else: []
+        )},
       {Horde.Registry, [name: CallService.CallRegistry, keys: :unique]},
       {Horde.DynamicSupervisor, [name: CallService.CallSupervisor, strategy: :one_for_one]},
       CallService.CallManager,

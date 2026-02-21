@@ -14,13 +14,15 @@ defmodule CallService.Router do
   scope "/api/v1/calls", CallService do
     pipe_through :api
 
+    # Root path for paginated call history (GET /api/v1/calls?page=1&per_page=20)
+    get "/", CallController, :history
     post "/initiate", CallController, :initiate
     post "/:call_id/answer", CallController, :answer
     post "/:call_id/reject", CallController, :reject
     post "/:call_id/end", CallController, :end_call
-    get "/:call_id", CallController, :show
     get "/user/active", CallController, :active_calls
     get "/user/history", CallController, :history
+    get "/:call_id", CallController, :show
   end
 
   scope "/api/v1/huddles", CallService do
