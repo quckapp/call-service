@@ -7,6 +7,9 @@ defmodule CallService.Application do
 
   @impl true
   def start(_type, _args) do
+    # Initialize circuit breakers
+    CallService.CircuitBreaker.init()
+
     children = [
       CallService.Telemetry,
       {Phoenix.PubSub, name: CallService.PubSub},
@@ -27,8 +30,12 @@ defmodule CallService.Application do
         )},
       {Horde.Registry, [name: CallService.CallRegistry, keys: :unique]},
       {Horde.DynamicSupervisor, [name: CallService.CallSupervisor, strategy: :one_for_one]},
+      # Hash ring for consistent distribution
+      CallService.Distribution,
       CallService.CallManager,
       CallService.HuddleManager,
+      CallService.Kafka.Producer,
+      CallService.Kafka.Consumer,
       {Cluster.Supervisor, [Application.get_env(:libcluster, :topologies), [name: CallService.ClusterSupervisor]]},
       CallService.Endpoint
     ]

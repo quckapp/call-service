@@ -116,6 +116,15 @@ defmodule CallService.Repo do
     )
   end
 
+  def update_huddle_participant(huddle_id, user_id, updates) do
+    Mongo.update_one(
+      @pool_name,
+      "huddles",
+      %{"_id" => huddle_id, "participants.user_id" => user_id},
+      %{"$set" => Enum.map(updates, fn {k, v} -> {"participants.$.#{k}", v} end) |> Map.new()}
+    )
+  end
+
   # Call history
   def save_call_log(log_data) do
     Mongo.insert_one(@pool_name, "call_logs", log_data)

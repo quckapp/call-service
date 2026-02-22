@@ -5,10 +5,26 @@ defmodule CallService.Router do
   pipeline :api do
     plug :accepts, ["json"]
     plug CallService.Plugs.AuthPlug
+    plug OpenApiSpex.Plug.PutApiSpec, module: CallService.ApiSpec
   end
 
   pipeline :public do
     plug :accepts, ["json"]
+  end
+
+  pipeline :browser do
+    plug :accepts, ["html"]
+  end
+
+  # Swagger UI routes
+  scope "/", CallService do
+    pipe_through :browser
+    get "/swagger", SwaggerController, :index
+  end
+
+  scope "/api", CallService do
+    pipe_through :public
+    get "/openapi", SwaggerController, :openapi
   end
 
   scope "/api/v1/calls", CallService do
