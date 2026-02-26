@@ -22,7 +22,7 @@ defmodule CallService.Router do
     get "/swagger", SwaggerController, :index
   end
 
-  scope "/api", CallService do
+  scope "/api/v1", CallService do
     pipe_through :public
     get "/openapi", SwaggerController, :openapi
   end

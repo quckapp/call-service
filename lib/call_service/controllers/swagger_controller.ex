@@ -27,7 +27,7 @@ defmodule CallService.SwaggerController do
     <script>
       window.onload = function() {
         const ui = SwaggerUIBundle({
-          url: "/api/openapi",
+          url: "/api/v1/openapi",
           dom_id: '#swagger-ui',
           deepLinking: true,
           presets: [
